@@ -240,7 +240,7 @@ test('cadena por voz abre Lens y usa SU cámara, no salta al lector QR',async()=
   await h.api.loadMaster();
   const plan=h.api.fastAgentPlan('Nexus, abrí Lens y prendé cámara');
   assert.equal(plan.action,'sequence');
-  assert.deepEqual(plan.steps.map(x=>x.action),['open_lens','start_lens_camera']);
+  assert.deepEqual([...plan.steps.map(x=>x.action)],['open_lens','start_lens_camera']);
  }finally{h.close()}
 });
 
