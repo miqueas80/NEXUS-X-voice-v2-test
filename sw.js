@@ -1,6 +1,6 @@
 'use strict';
 // Incrementar VERSION junto con APP_VERSION cuando cambie cualquier recurso CORE.
-const VERSION='2026.10.08-nexus-local-voice-plus-r2-test';
+const VERSION='2026.10.08-nexus-voice-actions-tts-r3-test';
 importScripts('./offline/assets.js');
 const SCOPE=new URL(self.registration.scope);
 const PREFIX='nexus-x-shell:'+encodeURIComponent(SCOPE.pathname)+':';
