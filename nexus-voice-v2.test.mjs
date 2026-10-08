@@ -69,14 +69,16 @@ test('voz offline usa Vosk incluso con red si el interruptor de Internet está a
  }finally{h.api.stopVoiceRecognition();h.close()}
 });
 
-test('voz online selecciona motor de navegador cuando Internet está habilitado',async()=>{
+test('voz online usa Vosk local aunque Chrome ofrezca SpeechRecognition',async()=>{
  const h=harness({online:true});try{
-  const local=fakeLocal(h);let remoteStarts=0;
-  h.window.SpeechRecognition=class{start(){remoteStarts++;this.onstart?.()}abort(){}stop(){}};
+  const local=fakeLocal(h);let remoteStarts=0,remoteConstructors=0;
+  h.window.SpeechRecognition=class{constructor(){remoteConstructors++}start(){remoteStarts++}};
   h.api.state.web=true;
   assert.equal(await h.api.startVoiceRecognition(),true);
-  assert.equal(remoteStarts,1);assert.equal(local.starts,0);
-  assert.equal(h.api.voiceRuntimeStatus().engine,'online');
+  assert.equal(remoteStarts,0);assert.equal(remoteConstructors,0);
+  assert.equal(local.starts,1);
+  assert.equal(h.api.voiceRuntimeStatus().engine,'offline');
+  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'enabled');
  }finally{h.api.stopVoiceRecognition();h.close()}
 });
 
@@ -88,19 +90,18 @@ test('ASR prioriza la transcripción de mayor confianza, o la primera si no hay 
  }finally{h.close()}
 });
 
-test('motor offline→online cambia entre sesiones y descarta transcripciones viejas',async()=>{
- const h=harness({online:true});try{
+test('al activar Internet Vosk no se reinicia, mantiene la misma sesión y ejecuta órdenes',async()=>{
+ const h=harness({online:true,stored:master.records});try{
   const local=fakeLocal(h);let remoteStarts=0;
-  h.window.SpeechRecognition=class{start(){remoteStarts++;this.onstart?.()}abort(){}stop(){}};
-  await h.api.loadMaster();
-  assert.equal(await h.api.startVoiceRecognition(),true);
-  const old=local.callbacks;assert.equal(h.api.voiceRuntimeStatus().engine,'offline');
+  h.window.SpeechRecognition=class{start(){remoteStarts++}};
+  await h.api.loadMaster();await h.api.startVoiceRecognition();
+  const callbacks=local.callbacks;assert.equal(local.starts,1);
   h.api.state.web=true;h.api.scheduleVoiceEngineAlignment();
-  await new Promise(resolve=>setTimeout(resolve,1450));
-  assert.equal(h.api.voiceRuntimeStatus().engine,'online');
-  assert.equal(remoteStarts,1);assert.equal(local.stops,1);
-  await old.onTranscript('Nexus abrí inventario');
-  assert.equal(h.api.state.view,'dashboard');
+  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'enabled');
+  await callbacks.onTranscript('Nexus abrí inventario');
+  assert.equal(h.api.state.view,'inventory');
+  assert.equal(local.starts,1);assert.equal(local.stops,0);assert.equal(remoteStarts,0);
+  assert.equal(h.api.voiceRuntimeStatus().engine,'offline');
  }finally{h.api.stopVoiceRecognition();h.close()}
 });
 
@@ -116,24 +117,19 @@ test('comandos de voz finales repetidos no ejecutan dos veces la misma orden',as
  }finally{h.api.stopVoiceRecognition();h.close()}
 });
 
-test('motor online→offline deja de usar ASR cloud tras desactivar Internet',async()=>{
- const h=harness({online:true});try{
-  const local=fakeLocal(h);let oldRecognizer;
-  h.window.SpeechRecognition=class{
-   constructor(){oldRecognizer=this;}
-   start(){this.onstart?.();}
-   abort(){}stop(){}
-  };
+test('al apagar Internet Vosk sigue activo sin micrófono remoto ni reinicio',async()=>{
+ const h=harness({online:true,stored:master.records});try{
+  const local=fakeLocal(h);let remoteStarts=0;
+  h.window.SpeechRecognition=class{start(){remoteStarts++}};
   await h.api.loadMaster();h.api.state.web=true;
-  assert.equal(await h.api.startVoiceRecognition(),true);
-  assert.equal(h.api.voiceRuntimeStatus().engine,'online');
+  await h.api.startVoiceRecognition();const callbacks=local.callbacks;
+  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'enabled');
   h.api.state.web=false;h.api.scheduleVoiceEngineAlignment();
-  await new Promise(resolve=>setTimeout(resolve,1450));
+  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'disabled');
+  await callbacks.onTranscript('Nexus abrí documentos');
+  assert.equal(h.api.state.view,'documents');
+  assert.equal(local.starts,1);assert.equal(local.stops,0);assert.equal(remoteStarts,0);
   assert.equal(h.api.voiceRuntimeStatus().engine,'offline');
-  assert.equal(local.starts,1);
-  const data=[Object.assign([{transcript:'Nexus abrí inventario',confidence:.98}],{isFinal:true})];
-  oldRecognizer.onresult?.({resultIndex:0,results:data});
-  assert.equal(h.api.state.view,'dashboard','un evento de la sesión online vieja no ejecuta comandos');
  }finally{h.api.stopVoiceRecognition();h.close()}
 });
 
@@ -142,4 +138,23 @@ test('al desactivar Internet no se solicita información externa con palabras de
   const route=h.api.resolveIntent('Nexus, información de actualidad sobre átomos');
   assert.equal(route.kind,'LOCAL');assert.equal(route.local,null);
  }finally{h.close()}
+});
+
+test('Vosk escucha online y mantiene xKiro como respuesta externa, sin usar ASR remoto',async()=>{
+ const calls=[];const h=harness({online:true,stored:master.records,fetcher:(url,options)=>{
+  calls.push(String(url));
+  if(String(url).endsWith('/models'))return Response.json({data:[{id:'mistralai/ministral-14b',access_tier:'free',capabilities:{}}]});
+  if(String(url).endsWith('/chat/completions'))return Response.json({choices:[{message:{content:'Los átomos contienen protones, neutrones y electrones.'}}]});
+  throw Error('Request unexpected '+url);
+ }});
+ try{
+  await h.api.loadMaster();
+  const local=fakeLocal(h);let remoteConstructed=0;h.window.SpeechRecognition=class{constructor(){remoteConstructed++}};
+  h.api.state.web=true;assert.equal(await h.api.startVoiceRecognition(),true);
+  await local.callbacks.onTranscript('Nexus explicame que es un atomo');
+  assert.equal(remoteConstructed,0);
+  assert.equal(h.api.state.agentHistory.at(-1).role,'assistant');
+  assert.match(h.api.state.agentHistory.at(-1).text,/átomos contienen/);
+  assert.ok(calls.some(url=>url.endsWith('/chat/completions')));
+ }finally{h.api.stopVoiceRecognition();h.close()}
 });

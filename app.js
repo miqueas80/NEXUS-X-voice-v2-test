@@ -18,7 +18,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='NEXUS-X-voice-v2-test';
 const REPO_BRANCH='main';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.10.08-nexus-voice-v2-isolated-test';
+const APP_VERSION='2026.10.08-voice-vosk-unified-test';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -2435,7 +2435,7 @@ async function startOfflineVoice(engine,{forceWasm=false}={}){
   onPartial:text=>session===voiceSessionEpoch?receiveVoicePartial(text):undefined,
   onStatus:patch=>{if(session!==voiceSessionEpoch)return;if(patch.error){voiceListening=false;$('#voiceStatusText').textContent='Voz local: error recuperable.';}else $('#voiceStatusText').textContent=patch.state;}});
  const current=voiceRecognition;await current.start({forceWasm});if(!voiceMonitoring||current!==voiceRecognition||session!==voiceSessionEpoch)return false;
- voiceEngineMode='offline';setVoiceActiveUi('Voz offline activa · esperando “Nexus”');return true;
+ voiceEngineMode='offline';setVoiceActiveUi('Vosk local activo · esperando “Nexus”');return true;
 }
 function normalizeVoiceTranscriptCandidate(text){
  let s=String(text||'').trim();if(!s)return '';
@@ -2469,17 +2469,15 @@ function chooseVoiceTranscript(result){
  voiceASRConfidence=measured[0].confidence;
  return measured[0].text;
 }
-function desiredVoiceEngine(){return state.web&&navigator.onLine!==false&&(globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition)?'online':'offline';}
-function voiceRuntimeStatus(){return {active:voiceMonitoring,engine:voiceEngineMode,preferred:desiredVoiceEngine(),busy:voiceCommandBusy,confidence:voiceASRConfidence,lastTranscriptAt:voiceLastInputAt};}
+// Reconocimiento siempre local: Internet cambia el proveedor de RESPUESTAS, nunca el oído.
+function desiredVoiceEngine(){return 'offline';}
+function voiceRuntimeStatus(){return {active:voiceMonitoring,engine:voiceEngineMode,recognizer:'Vosk WASM',externalResponses:state.web&&navigator.onLine!==false?'enabled':'disabled',preferred:desiredVoiceEngine(),busy:voiceCommandBusy,confidence:voiceASRConfidence,lastTranscriptAt:voiceLastInputAt};}
 function scheduleVoiceEngineAlignment(){
- if(!voiceMonitoring||desiredVoiceEngine()===voiceEngineMode)return;
- clearTimeout(voiceSwitchTimer);
- voiceSwitchTimer=setTimeout(async()=>{
-  if(!voiceMonitoring||desiredVoiceEngine()===voiceEngineMode)return;
-  if(voiceSpeaking||voiceCommandBusy||voiceAwaitingCommand||Date.now()-voiceLastInputAt<1800){scheduleVoiceEngineAlignment();return;}
-  stopVoiceRecognition({manual:false});
-  await startVoiceRecognition({automatic:true});
- },900);
+ // Nunca reiniciar el micrófono ni reemplazar Vosk por Chrome al cambiar conectividad.
+ if(!voiceMonitoring||voiceEngineMode!=='offline'||voiceSpeaking||voiceAwaitingCommand||voiceCommandBusy)return;
+ const current=state.web&&navigator.onLine!==false?'Internet habilitado para xKiro':'respuestas locales';
+ const target=$('#voiceStatusText');
+ if(target)target.textContent='Vosk local activo · '+current+' · esperando “Nexus”';
 }
 
 async function startBrowserVoice(SR,engine){
@@ -2492,11 +2490,22 @@ async function startBrowserVoice(SR,engine){
  voiceRecognition=recognizer;recognizer.start();return true;
 }
 async function startVoiceRecognition({automatic=false}={}){
- if(voiceMonitoring)return true;const engine=globalThis.NexusOffline;if(!engine){$('#voiceStatusText').textContent='Motor local no disponible. Recargá NEXUS.';return false}
- const granted=await requestMicrophonePermission({silent:automatic});if(!granted)return false;++voiceSessionEpoch;voiceMonitoring=true;voiceSpeaking=false;voicePartialInterrupted=false;
- const SR=globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition;
- try{if(desiredVoiceEngine()==='online'&&SR)return await startBrowserVoice(SR,engine);return await startOfflineVoice(engine)}
- catch(error){if(voiceMonitoring&&desiredVoiceEngine()==='online'&&SR){try{return await startOfflineVoice(engine,{forceWasm:true})}catch{}}voiceMonitoring=false;voiceListening=false;$('#voiceStatus')?.classList.remove('active');$('#voiceStatusText').textContent=error.message||'No se pudo iniciar la voz.';return false}
+ if(voiceMonitoring)return true;
+ const engine=globalThis.NexusOffline;
+ if(!engine){$('#voiceStatusText').textContent='Motor Vosk local no disponible. Recargá NEXUS.';return false;}
+ const granted=await requestMicrophonePermission({silent:automatic});
+ if(!granted)return false;
+ ++voiceSessionEpoch;voiceMonitoring=true;voiceSpeaking=false;voicePartialInterrupted=false;
+ try{
+  // forceWasm evita también el reconocimiento nativo opcional; usamos Vosk
+  // tanto con Internet activado como en modo avión.
+  return await startOfflineVoice(engine,{forceWasm:true});
+ }catch(error){
+  voiceMonitoring=false;voiceListening=false;
+  $('#voiceStatus')?.classList.remove('active');
+  $('#voiceStatusText').textContent='Vosk local no disponible. Prepará voz offline y reintentá.';
+  return false;
+ }
 }
 function spanishVoiceScore(voice){const lang=String(voice?.lang||'').toLowerCase();let score=lang==='es-ar'?300:lang==='es-es'?240:lang.startsWith('es-')?190:lang==='es'?170:-1;if(score<0)return score;if(voice?.localService)score+=30;return score}
 function selectSpanishVoice(voices,{localOnly=false}={}){return (voices||[]).filter(v=>spanishVoiceScore(v)>=0&&(!localOnly||v.localService)).sort((a,b)=>spanishVoiceScore(b)-spanishVoiceScore(a))[0]||null}
