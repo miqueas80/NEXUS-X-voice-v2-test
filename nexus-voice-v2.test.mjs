@@ -153,7 +153,7 @@ test('voz exclusivamente local: no llama a xKiro; el chat escrito sí puede cons
   h.api.state.web=true;assert.equal(await h.api.startVoiceRecognition(),true);
   await local.callbacks.onTranscript('Nexus explicame que es un atomo');
   assert.equal(requests.length,0,'voz no debe enviar audio ni transcripción a proveedor externo');
-  assert.match(h.api.state.agentHistory.at(-1).text,/voz funciona de forma local/i);
+  assert.match(h.api.state.agentHistory.at(-1).text,/no encontré evidencia local suficiente/i);
   assert.equal(h.api.voiceRuntimeStatus().externalResponses,'text-only');
   const chat=await h.api.nexusAgentTurn('Nexus explicame que es un atomo');
   assert.equal(chat.route,'EXTERNO');
