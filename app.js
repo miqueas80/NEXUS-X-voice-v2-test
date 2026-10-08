@@ -1980,7 +1980,7 @@ function fastAgentPlan(q){
   if(contextual)return contextual;
   const calendarDraft=parseNaturalCalendarDraft(raw);
   if(calendarDraft?.date&&calendarDraft.text)return {action:'create_calendar_event',date:calendarDraft.date,text:calendarDraft.text};
-  const parts=raw.split(/\s+(?:y|luego|despues|después|tambien|también)\s+|[,;]\s*(?=(?:busca|buscar|buscá|abrir|abrí|abre|abrime|mostrame|inicia|iniciá|prende|prendé|detene|detené|agendá|recordame|recuérdame)\b)/i).map(x=>x.trim()).filter(Boolean);
+  const parts=raw.split(/\s+(?:y|luego|despues|después|tambien|también)\s+|[,;]\s*(?=(?:busca|buscar|buscá|abrir|abrí|abre|abrime|mostrame|inicia|iniciá|prende|prendé|detene|detené|agendá|recordame|recuérdame)(?:\s|$))/i).map(x=>x.trim()).filter(Boolean);
   if(parts.length>1){
     const steps=parts.map(parseLocalAssistantAction);
     if(steps.every(Boolean)&&steps.length<=8){
