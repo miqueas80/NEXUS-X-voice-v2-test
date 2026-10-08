@@ -153,7 +153,7 @@ test('voz exclusivamente local: no llama a xKiro; el chat escrito sí puede cons
   h.api.state.web=true;assert.equal(await h.api.startVoiceRecognition(),true);
   await local.callbacks.onTranscript('Nexus explicame que es un atomo');
   assert.equal(requests.length,0,'voz no debe enviar audio ni transcripción a proveedor externo');
-  assert.match(h.api.state.agentHistory.at(-1).text,/voz funciona de forma local/i);
+  assert.match(h.api.state.agentHistory.at(-1).text,/no encontré evidencia local suficiente/i);
   assert.equal(h.api.voiceRuntimeStatus().externalResponses,'text-only');
   const chat=await h.api.nexusAgentTurn('Nexus explicame que es un atomo');
   assert.equal(chat.route,'EXTERNO');
@@ -202,6 +202,19 @@ test('voz conserva preguntas locales y seguimiento aun con Internet habilitado',
   assert.equal(first.actions[0].result.ok,true);
   const follow=await h.api.nexusAgentTurn('Nexus, ¿y su fórmula?',{localOnly:true});
   assert.match(follow.answer,/fórmula registrada|no tiene una fórmula cargada/i);
+  assert.equal(h.calls.length,0);
+ }finally{h.close()}
+});
+
+test('voz con Internet activado consulta evidencia local de reactivos sin xKiro',async()=>{
+ const h=harness({online:true,stored:master.records,fetcher:()=>{throw Error('No remote request from voice')}});
+ try{
+  await h.api.loadMaster();h.api.state.web=true;
+  const out=await h.api.nexusAgentTurn('Nexus, qué es ácido nítrico',{localOnly:true});
+  assert.equal(out.route,'LOCAL');
+  assert.equal(out.actions.length,0);
+  assert.match(out.answer,/inventario local|documento local/i);
+  assert.match(out.answer,/nítrico|nitrico/i);
   assert.equal(h.calls.length,0);
  }finally{h.close()}
 });

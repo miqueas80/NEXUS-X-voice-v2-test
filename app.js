@@ -18,7 +18,7 @@ const REPO_OWNER='miqueas80';
 const REPO_NAME='NEXUS-X-voice-v2-test';
 const REPO_BRANCH='main';
 const DOC_MAX_BYTES=16*1024*1024;
-const APP_VERSION='2026.10.08-nexus-local-voice-plus-test';
+const APP_VERSION='2026.10.08-nexus-local-voice-plus-r2-test';
 const INVENTORY_RECOVERY_KEY='nexus_x_inventory_recovery_v1';
 const health={storage:'sin comprobar',documents:'sin comprobar',errors:[],boot:'BOOT'};
 const LENS_EXTERNAL_CACHE_TTL=30*60*1000;
@@ -2267,7 +2267,7 @@ async function nexusAgentTurn(userText,{speak=false,localOnly=false}={}){
  if(localOnly){
   if(unsafeVoicePlan(resolved.local))route={kind:'LOCAL',local:null,clarification:'Esa acción no se ejecuta por voz. Abrí el módulo correspondiente y confirmala desde la pantalla.'};
   else if(resolved.kind==='HÍBRIDO')route={kind:'LOCAL',local:resolved.local};
-  else if(resolved.kind==='EXTERNO')route={kind:'LOCAL',local:null,clarification:'Mi voz funciona de forma local. Para consultar información externa, escribí tu pregunta en el chat de NEXUS IA.'};
+  else if(resolved.kind==='EXTERNO'){const evidence=localEvidenceAnswer(q);route={kind:'LOCAL',local:null,clarification:evidence||'No encontré evidencia local suficiente para responder. Para una investigación externa, escribí la pregunta en el chat de NEXUS IA.'};}
  }
  const emergency=emergencyLabResponse(q);if(emergency){answer='LOCAL · '+emergency;state.agentHistory.push({role:'user',text:q},{role:'assistant',text:answer});state.agentHistory=state.agentHistory.slice(-12);if(speak)speakText(answer);return {answer,actions,fast:true,route:'SEGURIDAD_LOCAL'};}
  if(route.local){localResult=await executeAssistantAction(route.local,{speak:false});actions.push({name:route.local.action,args:route.local,result:localResult});rememberNexusAction(route.local,localResult);answer='LOCAL · '+fastAgentAnswer(route.local,localResult)}
