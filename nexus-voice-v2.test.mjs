@@ -78,7 +78,7 @@ test('voz online usa Vosk local aunque Chrome ofrezca SpeechRecognition',async()
   assert.equal(remoteStarts,0);assert.equal(remoteConstructors,0);
   assert.equal(local.starts,1);
   assert.equal(h.api.voiceRuntimeStatus().engine,'offline');
-  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'enabled');
+  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'text-only');
  }finally{h.api.stopVoiceRecognition();h.close()}
 });
 
@@ -97,7 +97,7 @@ test('al activar Internet Vosk no se reinicia, mantiene la misma sesión y ejecu
   await h.api.loadMaster();await h.api.startVoiceRecognition();
   const callbacks=local.callbacks;assert.equal(local.starts,1);
   h.api.state.web=true;h.api.scheduleVoiceEngineAlignment();
-  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'enabled');
+  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'text-only');
   await callbacks.onTranscript('Nexus abrí inventario');
   assert.equal(h.api.state.view,'inventory');
   assert.equal(local.starts,1);assert.equal(local.stops,0);assert.equal(remoteStarts,0);
@@ -123,9 +123,9 @@ test('al apagar Internet Vosk sigue activo sin micrófono remoto ni reinicio',as
   h.window.SpeechRecognition=class{start(){remoteStarts++}};
   await h.api.loadMaster();h.api.state.web=true;
   await h.api.startVoiceRecognition();const callbacks=local.callbacks;
-  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'enabled');
+  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'text-only');
   h.api.state.web=false;h.api.scheduleVoiceEngineAlignment();
-  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'disabled');
+  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'text-only');
   await callbacks.onTranscript('Nexus abrí documentos');
   assert.equal(h.api.state.view,'documents');
   assert.equal(local.starts,1);assert.equal(local.stops,0);assert.equal(remoteStarts,0);
@@ -140,21 +140,68 @@ test('al desactivar Internet no se solicita información externa con palabras de
  }finally{h.close()}
 });
 
-test('Vosk escucha online y mantiene xKiro como respuesta externa, sin usar ASR remoto',async()=>{
- const calls=[];const h=harness({online:true,stored:master.records,fetcher:(url,options)=>{
-  calls.push(String(url));
+test('voz exclusivamente local: no llama a xKiro; el chat escrito sí puede consultarlo',async()=>{
+ const requests=[];
+ const h=harness({online:true,stored:master.records,fetcher:(url)=>{
+  requests.push(String(url));
   if(String(url).endsWith('/models'))return Response.json({data:[{id:'mistralai/ministral-14b',access_tier:'free',capabilities:{}}]});
   if(String(url).endsWith('/chat/completions'))return Response.json({choices:[{message:{content:'Los átomos contienen protones, neutrones y electrones.'}}]});
-  throw Error('Request unexpected '+url);
+  throw Error('Unexpected '+url);
  }});
  try{
-  await h.api.loadMaster();
-  const local=fakeLocal(h);let remoteConstructed=0;h.window.SpeechRecognition=class{constructor(){remoteConstructed++}};
+  await h.api.loadMaster();const local=fakeLocal(h);
   h.api.state.web=true;assert.equal(await h.api.startVoiceRecognition(),true);
   await local.callbacks.onTranscript('Nexus explicame que es un atomo');
-  assert.equal(remoteConstructed,0);
-  assert.equal(h.api.state.agentHistory.at(-1).role,'assistant');
-  assert.match(h.api.state.agentHistory.at(-1).text,/átomos contienen/);
-  assert.ok(calls.some(url=>url.endsWith('/chat/completions')));
+  assert.equal(requests.length,0,'voz no debe enviar audio ni transcripción a proveedor externo');
+  assert.match(h.api.state.agentHistory.at(-1).text,/voz funciona de forma local/i);
+  assert.equal(h.api.voiceRuntimeStatus().externalResponses,'text-only');
+  const chat=await h.api.nexusAgentTurn('Nexus explicame que es un atomo');
+  assert.equal(chat.route,'EXTERNO');
+  assert.match(chat.answer,/átomos contienen/i);
+  assert.ok(requests.some(url=>url.endsWith('/chat/completions')));
  }finally{h.api.stopVoiceRecognition();h.close()}
+});
+
+test('comprensión offline ampliada de órdenes naturales en español argentino',async()=>{
+ const h=harness({online:false,stored:master.records});try{
+  await h.api.loadMaster();
+  assert.deepEqual({...h.api.fastAgentPlan('Nexus, llevame al inventario')},{action:'open_view',query:'inventory'});
+  assert.deepEqual({...h.api.fastAgentPlan('Nexus, poneme documentos')},{action:'open_view',query:'documents'});
+  assert.equal(h.api.fastAgentPlan('Nexus, prendé la cámara').clarification?.includes('Lens'),true);
+  h.api.state.view='lens';
+  assert.equal(h.api.fastAgentPlan('Nexus, poné en marcha la cámara').action,'start_lens_camera');
+  assert.equal(h.api.fastAgentPlan('Nexus, frená la cámara').action,'stop_lens_camera');
+  h.api.state.view='inventory';
+  assert.equal(h.api.fastAgentPlan('Nexus, donde guardamos acido nitrico').action,'search_inventory');
+  assert.equal(h.calls.length,0);
+ }finally{h.close()}
+});
+
+test('órdenes habladas delicadas nunca ejecutan borrados, sincronización o búsqueda web',async()=>{
+ const h=harness({online:true,stored:master.records,fetcher:()=>{throw Error('No network allowed for voice')}});try{
+  await h.api.loadMaster();h.api.state.web=true;
+  const starting=h.api.state.inventory.length;
+  const destructive=await h.api.nexusAgentTurn('Nexus, elimina del inventario acido nitrico confirmo',{localOnly:true});
+  assert.equal(destructive.route,'LOCAL');
+  assert.equal(destructive.actions.length,0);
+  assert.match(destructive.answer,/no se ejecuta por voz/i);
+  const net=await h.api.nexusAgentTurn('Nexus, sincronizá el repositorio',{localOnly:true});
+  assert.equal(net.route,'LOCAL');
+  assert.equal(net.actions.length,0);
+  assert.equal(h.api.state.inventory.length,starting);
+  assert.equal(h.calls.length,0);
+ }finally{h.close()}
+});
+
+test('voz conserva preguntas locales y seguimiento aun con Internet habilitado',async()=>{
+ const h=harness({online:true,stored:master.records,fetcher:()=>{throw Error('Voice cannot use network')}});
+ try{
+  await h.api.loadMaster();h.api.state.web=true;
+  const first=await h.api.nexusAgentTurn('Nexus, buscá en inventario ácido nítrico',{localOnly:true});
+  assert.equal(first.route,'LOCAL');
+  assert.equal(first.actions[0].result.ok,true);
+  const follow=await h.api.nexusAgentTurn('Nexus, ¿y su fórmula?',{localOnly:true});
+  assert.match(follow.answer,/fórmula registrada|no tiene una fórmula cargada/i);
+  assert.equal(h.calls.length,0);
+ }finally{h.close()}
 });
