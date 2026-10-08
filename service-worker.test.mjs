@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const source=fs.readFileSync(new URL('./sw.js',import.meta.url),'utf8');
-function worker({failInstall=false}={}){
- const stores=new Map(),handlers={},base='https://miqueas80.github.io/Laboratorio2.0/';let network=0,claimed=0;
+function worker({failInstall=false,base='https://miqueas80.github.io/Laboratorio2.0/'}={}){
+ const stores=new Map(),handlers={};let network=0,claimed=0;
  const caches={keys:async()=>[...stores.keys()],delete:async key=>stores.delete(key),open:async key=>{
   if(!stores.has(key))stores.set(key,new Map());const store=stores.get(key);
-  return {addAll:async requests=>{for(const req of requests){const url=new URL(req.url);assert.equal(url.origin,new URL(base).origin);assert.ok(url.pathname.startsWith('/Laboratorio2.0/'));const file=decodeURIComponent(url.pathname.slice('/Laboratorio2.0/'.length))||'index.html';assert.ok(fs.existsSync(new URL('./'+file,import.meta.url)),file);if(failInstall&&file==='pdf.mjs')throw new Error('recurso caído');store.set(req.url,new Response(file));}},match:async url=>store.get(typeof url==='string'?url:url.url)?.clone()};
+  return {addAll:async requests=>{for(const req of requests){const url=new URL(req.url);assert.equal(url.origin,new URL(base).origin);assert.ok(url.pathname.startsWith(new URL(base).pathname));const file=decodeURIComponent(url.pathname.slice(new URL(base).pathname.length))||'index.html';assert.ok(fs.existsSync(new URL('./'+file,import.meta.url)),file);if(failInstall&&file==='pdf.mjs')throw new Error('recurso caído');store.set(req.url,new Response(file));}},match:async url=>store.get(typeof url==='string'?url:url.url)?.clone()};
  }};
  const env={self:{registration:{scope:base},clients:{claim:async()=>{claimed++}},addEventListener:(event,fn)=>handlers[event]=fn},caches,URL,Request,Response,fetch:async()=>{network++;throw new Error('offline')}};env.globalThis=env.self;env.importScripts=path=>vm.runInNewContext(fs.readFileSync(new URL(path,import.meta.url),'utf8'),env);vm.runInNewContext(source,env);
  const lifecycle=type=>{let done;handlers[type]({waitUntil:p=>done=p});return done};
@@ -35,4 +35,8 @@ test('PWA: modelos preparados sobreviven activación y se sirven sin red; faltan
  assert.ok(w.stores.has(key));const res=await w.request('./offline/v1/voice/vosk-es.tar.gz');assert.equal(await res.text(),'model bytes');assert.equal(w.network,0);
  assert.equal((await w.request('./offline/v1/vision/mobileclip-s0.onnx')).status,503);
  assert.equal((await w.request('./offline/v1/vision/ocr/PP-OCRv6_tiny_det.onnx')).status,503);
+});
+
+test('Voice V2 preview: cachés y rutas aislados de producción y otras demos',async()=>{
+ const base='https://miqueas80.github.io/NEXUS-X-voice-v2-test/',production='nexus-x-shell:%2FLaboratorio2.0%2F:current',expo='nexus-x-shell:%2FNEXUS-X-expo-test%2F:current';for(const failInstall of [false,true]){const w=worker({base,failInstall});w.stores.set(production,new Map());w.stores.set(expo,new Map());if(failInstall)await assert.rejects(w.lifecycle('install'));else{await w.lifecycle('install');await w.lifecycle('activate');for(const path of ['./','./app.js','./offline/knowledge.js','./manifest.webmanifest'])assert.equal((await w.request(path,path==='./'?'navigate':undefined)).status,200);assert.equal(await w.request('/Laboratorio2.0/app.js'),null);}assert.ok(w.stores.has(production));assert.ok(w.stores.has(expo));}
 });

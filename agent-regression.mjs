@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
+import {fileURLToPath} from 'node:url';
 
-const root = new URL('.', import.meta.url).pathname;
+const root = fileURLToPath(new URL('.', import.meta.url));
 const app = fs.readFileSync(root + 'app.js', 'utf8');
 const inventory = JSON.parse(fs.readFileSync(root + 'inventory.json', 'utf8'));
 const failures = [];
