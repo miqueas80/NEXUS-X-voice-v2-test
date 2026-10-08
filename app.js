@@ -2388,24 +2388,16 @@ function stopVoiceRecognition({manual=true}={}){
 }
 let voiceNativeInstallLang='es-AR';
 async function refreshLocalVoiceStatus(){
+ // Único motor de reconocimiento: Vosk WASM. No consultar ni instalar
+ // SpeechRecognition online/nativo al abrir los ajustes de voz.
  const el=$('#localVoiceStatus'),button=$('#installVoiceLanguage'),engine=globalThis.NexusOffline;
  if(button)button.hidden=true;
- const local=await engine?.nativeVoice();
  const cached=engine?await engine.cacheStatus('voice'):{ready:false};
- const SR=globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition;
- if(!local&&button&&typeof SR?.available==='function'&&typeof SR?.install==='function'){
-  try{for(const lang of ['es-AR','es-ES'])if(await SR.available({langs:[lang],processLocally:true})==='downloadable'){voiceNativeInstallLang=lang;button.hidden=false;button.textContent='Descargar idioma nativo '+lang;break;}}catch{}
- }
- if(el)el.textContent=local?'Voz local nativa disponible':cached.ready?'Voz local lista · VOSK':'Modelo no disponible · preparar voz offline';
- return local?'available':cached.ready?'wasm-ready':'unavailable';
+ if(el)el.textContent=cached.ready?'Voz local lista · VOSK':'Modelo Vosk no preparado · descargar voz local';
+ return cached.ready?'wasm-ready':'unavailable';
 }
-async function installLocalVoiceLanguage(){
- const SR=globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition,button=$('#installVoiceLanguage');
- if(typeof SR?.install!=='function')return false;if(button)button.disabled=true;
- try{const installed=await SR.install({langs:[voiceNativeInstallLang],processLocally:true});await refreshLocalVoiceStatus();return !!installed;}
- catch(error){toast('No se pudo instalar el idioma nativo. Prepará la voz Vosk offline.');return false;}
- finally{if(button)button.disabled=false;}
-}
+// API heredada sin instalador online: control desactivado, no instala servicios cloud.
+async function installLocalVoiceLanguage(){return false;}
 async function prepareOfflineEngine(group){
  const engine=globalThis.NexusOffline;if(!engine){toast('No se cargó el motor local. Recargá NEXUS.');return false}
  const button=$('#'+(group==='voice'?'prepareVoiceBtn':'prepareVisionBtn')),status=$('#'+(group==='voice'?'localVoiceStatus':'lensEngineStatus'));
