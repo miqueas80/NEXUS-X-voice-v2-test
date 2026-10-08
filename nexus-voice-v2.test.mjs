@@ -205,3 +205,16 @@ test('voz conserva preguntas locales y seguimiento aun con Internet habilitado',
   assert.equal(h.calls.length,0);
  }finally{h.close()}
 });
+
+test('voz con Internet activado consulta evidencia local de reactivos sin xKiro',async()=>{
+ const h=harness({online:true,stored:master.records,fetcher:()=>{throw Error('No remote request from voice')}});
+ try{
+  await h.api.loadMaster();h.api.state.web=true;
+  const out=await h.api.nexusAgentTurn('Nexus, qué es ácido nítrico',{localOnly:true});
+  assert.equal(out.route,'LOCAL');
+  assert.equal(out.actions.length,0);
+  assert.match(out.answer,/inventario local|documento local/i);
+  assert.match(out.answer,/nítrico|nitrico/i);
+  assert.equal(h.calls.length,0);
+ }finally{h.close()}
+});
