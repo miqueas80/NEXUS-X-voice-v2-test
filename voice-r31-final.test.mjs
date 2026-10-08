@@ -18,22 +18,26 @@ test('voice v2 unificada: Internet ON mantiene Vosk y no crea SpeechRecognition 
 
 test('r31 final: sin red usa motor local/Vosk y no SpeechRecognition online',async()=>{const h=harness({stored:master.records,online:false});try{await h.api.loadMaster();const off=offlineEngine(h);let made=0;h.window.SpeechRecognition=class{constructor(){made++}};assert.equal(await h.api.startVoiceRecognition(),true);assert.equal(made,0);assert.equal(off.starts,1);assert.match(h.document.querySelector('#voiceStatusText').textContent,/Vosk local activo/i)}finally{h.api.stopVoiceRecognition();h.close()}});
 
-test('voz exclusivamente local: nunca selecciona TTS remoto aunque haya Internet',()=>{
+test('TTS recuperado: voz local preferida y síntesis predeterminada si Android no informa una local',()=>{
  let h=harness({online:true});try{
-  const cloud=speech(h,[{name:'cloud AR',lang:'es-AR',localService:false}]);
-  assert.equal(h.api.speakText('LOCAL · Listo. Abrí el inventario.'),false);
-  assert.equal(cloud.count,0);
+  const fallback=speech(h,[{name:'voz no local',lang:'es-AR',localService:false}]);
+  assert.equal(h.api.speakText('LOCAL · Listo. Abrí el inventario.'),true);
+  assert.equal(fallback.count,1);
+  assert.equal(fallback.last.voice,undefined,'no asignar explícitamente voz remota');
+  assert.equal(fallback.last.lang,'es-AR');
+  assert.equal(h.window.NexusOffline,undefined);
  }finally{h.close()}
  h=harness({online:true});try{
   const local=speech(h,[{name:'local AR',lang:'es-AR',localService:true},{name:'cloud ES',lang:'es-ES',localService:false}]);
   assert.equal(h.api.speakText('LOCAL · Listo. Abrí el inventario.'),true);
   assert.equal(local.last.voice.localService,true);
-  assert.doesNotMatch(local.last.text,/LOCAL\\s*·/);
+  assert.doesNotMatch(local.last.text,/LOCAL\s*·/);
  }finally{h.close()}
  h=harness({online:false});try{
-  const local=speech(h,[{name:'local AR',lang:'es-AR',localService:true}]);
+  const fallback=speech(h,[]);
   assert.equal(h.api.speakText('Listo'),true);
-  assert.equal(local.last.voice.localService,true);
+  assert.equal(fallback.last.voice,undefined);
+  assert.equal(fallback.last.lang,'es-AR');
  }finally{h.close()}
 });
 

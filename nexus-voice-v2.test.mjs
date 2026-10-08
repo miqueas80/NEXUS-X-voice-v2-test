@@ -218,3 +218,62 @@ test('voz con Internet activado consulta evidencia local de reactivos sin xKiro'
   assert.equal(h.calls.length,0);
  }finally{h.close()}
 });
+
+test('cadena por voz con coma abre inventario Y busca un reactivo de verdad',async()=>{
+ const h=harness({stored:master.records,online:false});try{
+  await h.api.loadMaster();
+  const plan=h.api.fastAgentPlan('Nexus, abrí inventario, buscá ácido nítrico');
+  assert.equal(plan.action,'sequence');
+  assert.equal(plan.steps[0].action,'open_view');
+  assert.equal(plan.steps[1].action,'search_inventory');
+  const out=await h.api.nexusAgentTurn('Nexus, abrí inventario, buscá ácido nítrico',{localOnly:true});
+  assert.equal(out.route,'LOCAL');
+  assert.equal(out.actions[0].result.ok,true);
+  assert.equal(h.api.state.view,'inventory');
+  assert.match(h.document.querySelector('#inventorySearch').value,/n[ií]trico/i);
+ }finally{h.close()}
+});
+
+test('cadena por voz abre Lens y usa SU cámara, no salta al lector QR',async()=>{
+ const h=harness({stored:master.records,online:false});
+ try{
+  await h.api.loadMaster();
+  const plan=h.api.fastAgentPlan('Nexus, abrí Lens y prendé cámara');
+  assert.equal(plan.action,'sequence');
+  assert.deepEqual([...plan.steps.map(x=>x.action)],['open_lens','start_lens_camera']);
+ }finally{h.close()}
+});
+
+test('ejecución Vosk muestra respuesta y confirma acción real en pantalla',async()=>{
+ const h=harness({stored:master.records,online:false});
+ try{
+  await h.api.loadMaster();
+  const fake=fakeLocal(h);
+  const output=[];
+  h.window.SpeechSynthesisUtterance=class{constructor(text){this.text=text}};
+  h.window.speechSynthesis={
+   getVoices:()=>[],cancel(){},speak:u=>output.push(u)
+  };
+  assert.equal(await h.api.startVoiceRecognition(),true);
+  await fake.callbacks.onTranscript('Nexus, abrí inventario');
+  assert.equal(h.api.state.view,'inventory');
+  assert.match(h.document.querySelector('#voiceResponse').textContent,/abrí inventario/i);
+  assert.match(h.document.querySelector('#voiceStatusText').textContent,/Acción local ejecutada/i);
+  assert.equal(output.length,1);
+  assert.equal(output[0].voice,undefined);
+  assert.equal(output[0].lang,'es-AR');
+ }finally{h.api.stopVoiceRecognition();h.close()}
+});
+
+test('Vosk no marca como hecha una acción que falló; muestra el motivo',async()=>{
+ const h=harness({stored:master.records,online:false});
+ try{
+  await h.api.loadMaster();
+  const fake=fakeLocal(h);
+  assert.equal(await h.api.startVoiceRecognition(),true);
+  await fake.callbacks.onTranscript('Nexus, abrí la ficha de un químico inexistente');
+  assert.match(h.document.querySelector('#voiceResponse').textContent,/no|error|encontr/i);
+  assert.match(h.document.querySelector('#voiceStatusText').textContent,/No pude completar/i);
+  assert.equal(h.api.state.view,'dashboard');
+ }finally{h.api.stopVoiceRecognition();h.close()}
+});
