@@ -12,7 +12,7 @@ test('voice v2 unificada: Internet ON mantiene Vosk y no crea SpeechRecognition 
  assert.equal(off.opts[0].forceWasm,true);
  assert.equal(h.api.voiceRuntimeStatus().engine,'offline');
  assert.equal(h.api.voiceRuntimeStatus().recognizer,'Vosk WASM');
- assert.equal(h.api.voiceRuntimeStatus().externalResponses,'enabled');
+ assert.equal(h.api.voiceRuntimeStatus().externalResponses,'text-only');assert.equal(h.api.voiceRuntimeStatus().textExternalAvailable,true);
  assert.match(h.document.querySelector('#voiceStatusText').textContent,/Vosk local activo/i);
 }finally{h.api.stopVoiceRecognition();h.close()}});
 
