@@ -83,7 +83,7 @@
    'hidróxido','sodio','potasio','reactivo','probeta','pipeta','bureta','matraz',
    'erlenmeyer','vaso','microscopio','balanza','agitador','mechero','y','el','la',
    'los','las','de','en','para','con','que','quiero','necesito','ver','sobre','su','las','nuestro','haceme'];
-  const clean=t=>String(t).toLowerCase().replace(/[^a-záéíóúüñ\\s]/g,' ').replace(/\\s+/g,' ').trim();
+  const clean=t=>String(t).toLowerCase().replace(/[^a-záéíóúüñ\s]/g,' ').replace(/\s+/g,' ').trim();
   const phrases=[
     'nexus abrí inventario','nexus mostrame el inventario','nexus poneme el inventario',
     'nexus llevame al inventario','nexus abrí documentos','nexus mostrame los documentos',
